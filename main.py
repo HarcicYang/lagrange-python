@@ -189,7 +189,12 @@ async def handle_group_admin(client: Client, event: GroupAdminChange):
 #     print("加好友？和我吗？")
 #     await client.set_friend_request(target_uid=event.from_uid, accept=True)
 
-lag = Lagrange(int(os.environ.get("LAGRANGE_UIN", "0")), "linux", os.environ.get("LAGRANGE_SIGN_URL", ""))
+lag = Lagrange(
+    int(os.environ.get("LAGRANGE_UIN", "0")),
+    "linux", os.environ.get("LAGRANGE_SIGN_URL", ""),
+    use_ipv6=False,
+    use_optimum=True
+)
 install_loguru()  # optional, for better logging
 lag.log.set_level("DEBUG")
 

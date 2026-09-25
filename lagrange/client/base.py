@@ -50,7 +50,8 @@ class BaseClient:
         sign_provider: Optional[
             Callable[[str, int, bytes], Coroutine[None, None, dict]]
         ] = None,
-        use_ipv6=True,
+        use_ipv6: bool=True,
+        uss_optimum: bool=True
     ):
         if uin and not sig_info.uin:
             sig_info.uin = uin
@@ -70,6 +71,7 @@ class BaseClient:
             self._reconnect_cb,
             self._disconnect_cb,
             use_v6=use_ipv6,
+            optimum=uss_optimum
         )
         self._sign_provider = sign_provider
 

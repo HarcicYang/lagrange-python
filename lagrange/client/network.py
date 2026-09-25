@@ -5,6 +5,8 @@ ClientNetwork Implement
 import asyncio
 import ipaddress
 import sys
+import socket
+import time
 from typing import Callable, overload, Optional
 from collections.abc import Coroutine
 from typing_extensions import Literal
@@ -28,12 +30,14 @@ class ClientNetwork(Connection):
         disconnect_cb: Callable[[bool], Coroutine],
         use_v6=False,
         *,
+        optimum: bool = False,
         manual_address: Optional[tuple[str, int]] = None,
     ):
         if not manual_address:
-            host, port = self.V6UPSTREAM if use_v6 else self.V4UPSTREAM
+            self._upstream = self.V6UPSTREAM if use_v6 else self.V4UPSTREAM
         else:
-            host, port = manual_address
+            self._upstream = manual_address
+        host, port = self._upstream
         super().__init__(host, port)
 
         self.conn_event = asyncio.Event()
@@ -41,6 +45,7 @@ class ClientNetwork(Connection):
         self._push_store = push_store
         self._reconnect_cb = reconnect_cb
         self._disconnect_cb = disconnect_cb
+        self._optimum = optimum
         self._wait_fut_map: dict[int, asyncio.Future[SSOPacket]] = {}
         self._connected = False
         self._sig = sig_info
@@ -59,6 +64,61 @@ class ClientNetwork(Connection):
         await self.conn_event.wait()
         self.writer.write(buf)
         await self.writer.drain()
+
+    async def _resolve_candidates(self) -> list[tuple[str, int]]:
+        family = socket.AF_INET6 if self._using_v6 else socket.AF_INET
+        loop = asyncio.get_running_loop()
+        try:
+            infos = await loop.getaddrinfo(
+                *self._upstream, family=family, type=socket.SOCK_STREAM,
+            )
+        except socket.gaierror as e:
+            log.network.error(f"DNS resolve failed: {e}")
+            return []
+        seen, result = set(), []
+        for info in infos:
+            ip, port = info[4][0], info[4][1]
+            if ip not in seen:
+                seen.add(ip)
+                result.append((ip, port))
+        return result
+
+    async def _probe(self, ip: str, port: int) -> Optional[float]:
+        start = time.monotonic()
+        try:
+            _, writer = await asyncio.wait_for(
+                asyncio.open_connection(ip, port), 1
+            )
+            latency = time.monotonic() - start
+            writer.close()
+            await writer.wait_closed()
+            return latency
+        except (OSError, asyncio.TimeoutError):
+            return None
+
+    async def _sort_servers(self, candidates: list[tuple[str, int]]) -> list[tuple[float, str, int]]:
+        latencies = await asyncio.gather(
+            *(self._probe(ip, port) for ip, port in candidates)
+        )
+        sorted_ = sorted(
+            ((lat, ip, port) for (ip, port), lat in zip(candidates, latencies)
+             if lat is not None),
+            key=lambda x: x[0],
+        )
+        for lat, ip, _ in sorted_:
+            log.network.debug(f"server: {ip} latency: {lat * 1000:.0f}ms")
+        return sorted_
+
+    async def connect(self) -> None:
+        if self._optimum:
+            candidates = await self._resolve_candidates()
+            if candidates:
+                best = await self._sort_servers(candidates)
+                if best:
+                    _, ip, port = best[0]
+                    log.network.info(f"using optimum server {ip}:{port}")
+                    self._host, self._port = ip, port
+        await super().connect()
 
     @overload
     async def send(

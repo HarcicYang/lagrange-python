@@ -24,9 +24,11 @@ class Lagrange:
         uin: int,
         protocol: Literal["linux", "macos", "windows", "custom"] = "linux",
         sign_url: Optional[str] = None,
-        device_info_path="./device.json",
-        signinfo_path="./sig.bin",
-        custom_protocol_path="./protocol.json",
+        device_info_path: str = "./device.json",
+        signinfo_path: str = "./sig.bin",
+        custom_protocol_path: str = "./protocol.json",
+        use_ipv6: bool = True,
+        use_optimum: bool = False
     ):
         self.im = InfoManager(uin, device_info_path, signinfo_path)
         self.uin = uin
@@ -36,6 +38,8 @@ class Lagrange:
         self.log = log
         self._protocol = protocol
         self._protocol_path = custom_protocol_path
+        self.use_ipv6 = use_ipv6
+        self.use_optimum = use_optimum
 
     def subscribe(self, event, handler):
         self.events[event] = handler
@@ -72,6 +76,8 @@ class Lagrange:
                 im.device,
                 im.sig_info,
                 self.sign,
+                self.use_ipv6,
+                self.use_optimum
             )
             for event, handler in self.events.items():
                 self.client.events.subscribe(event, handler)

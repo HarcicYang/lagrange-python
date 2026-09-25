@@ -104,9 +104,10 @@ class Client(BaseClient):
         device_info: DeviceInfo,
         sig_info: SigInfo,
         sign_provider: Optional[Callable[[str, int, bytes], Coroutine[None, None, dict]]] = None,
-        use_ipv6=True,
+        use_ipv6: bool = True,
+        use_optimum: bool = True
     ):
-        super().__init__(uin, app_info, device_info, sig_info, sign_provider, use_ipv6)
+        super().__init__(uin, app_info, device_info, sig_info, sign_provider, use_ipv6, use_optimum)
 
         self._events = Events()
         self._push_deliver = PushDeliver(self)
